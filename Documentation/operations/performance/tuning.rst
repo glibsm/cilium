@@ -19,18 +19,21 @@ Even when network routing is performed by Cilium using eBPF, network packets
 still traverse through some parts of the regular network stack of the node by
 default. This default ensures that all packets still traverse through all of
 the iptables hooks in case you depend on them. However, they add significant
-overhead, for exact numbers, see :ref:`benchmark_throughput` and compare the
+overhead. For exact numbers, see :ref:`benchmark_throughput` and compare the
 results for "Cilium" and "Cilium (legacy host-routing)".
 
 **Requirements:**
 
 * Kernel >= 5.10
+* Direct-routing configuration or tunneling
+* eBPF-based kube-proxy replacement
 * eBPF-based Masquerading
 
-eBPF-based host-routing is automatically enabled if you run a kernel capable of
-supporting this. To validate whether your installation is running with eBPF
-host-routing, run ``cilium status`` in any of the Cilium pods and look for the
-line reporting the status for "Host routing".
+eBPF-based host-routing which we `first introduced <https://cilium.io/blog/2020/11/10/cilium-19#veth>`_
+in Cilium 1.9 is automatically enabled if you run a kernel capable of supporting
+this. To validate whether your installation is running with eBPF host-routing,
+run ``cilium status`` in any of the Cilium pods and look for the line reporting
+the status for "Host routing".
 
 Bypass iptables Connection Tracking
 ===================================
@@ -44,8 +47,9 @@ connection tracker.
 
 **Requirements:**
 
+* Kernel >= 4.19.57, >= 5.1.16, >= 5.2
 * Direct-routing configuration
-* kube-proxy replacement enabled (Kernel >= 4.19.57, >= 5.1.16, >= 5.2)
+* eBPF-based kube-proxy replacement
 
 To enable the iptables connection-tracking bypass:
 
@@ -102,23 +106,116 @@ jumbo frames then Cilium will automatically make use of it.
 To benefit from this, make sure that your system is configured to use jumbo
 frames if your network allows for it.
 
-Kernel Optimizations
-====================
+Bandwidth Manager
+=================
 
-The kernel allows to configure several options which will help maximize network
-performance.
+Cilium's Bandwidth Manager is responsible for managing network traffic more
+efficiently with the goal of improving overall application latency and throughput.
+
+Aside from natively supporting Kubernetes Pod bandwidth annotations, the
+Bandwidth Manager which we `first introduced <https://cilium.io/blog/2020/11/10/cilium-19#bwmanager>`_
+in Cilium 1.9 is also setting up Fair Queue (FQ) queueing disciplines to
+support TCP stack pacing (e.g. from EDT/BBR) on all external-facing network
+devices as well as setting optimal server-grade sysctl settings for the
+networking stack.
+
+**Requirements:**
+
+* Kernel >= 5.1
+* Direct-routing configuration or tunneling
+* eBPF-based kube-proxy replacement
+
+To enable the Bandwidth Manager:
+
+.. tabs::
+
+    .. group-tab:: Helm
+
+       .. parsed-literal::
+
+           helm install cilium |CHART_RELEASE| \\
+             --namespace kube-system \\
+             --set bandwidthManager=true \\
+             --set kubeProxyReplacement=strict
+
+To validate whether your installation is running with Bandwidth Manager,
+run ``cilium status`` in any of the Cilium pods and look for the line
+reporting the status for "BandwidthManager" which should state "EDT with BPF".
+
+XDP Acceleration
+================
+
+Cilium has built-in support for accelerating NodePort, LoadBalancer services
+and services with externalIPs for the case where the arriving request needs
+to be pushed back out of the node when the backend is located on a remote node.
+
+In that case, the network packets do not need to be pushed all the way to the
+upper networking stack, but with the help of XDP, Cilium is able to process
+those requests right out of the network driver layer. This helps to reduce
+latency and scale-out of services given a single node's forwarding capacity
+is dramatically increased. The kube-proxy replacement at the XDP layer is
+`available from Cilium 1.8 <https://cilium.io/blog/2020/06/22/cilium-18#kubeproxy-removal>`_.
+
+**Requirements:**
+
+* Kernel >= 4.19.57, >= 5.1.16, >= 5.2
+* Native XDP supported driver, check our `driver list <https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/#loadbalancer-nodeport-xdp-acceleration>`_
+* Direct-routing configuration
+* eBPF-based kube-proxy replacement
+
+To enable the XDP Acceleration, check out our `getting started guide <https://docs.cilium.io/en/v1.9/gettingstarted/kubeproxy-free/#loadbalancer-nodeport-xdp-acceleration>`_ which also contains instructions for setting it
+up on public cloud providers.
+
+To validate whether your installation is running with XDP Acceleration,
+run ``cilium status`` in any of the Cilium pods and look for the line
+reporting the status for "XDP Acceleration" which should say "Native".
+
+eBPF Map Sizing
+===============
+
+All eBPF maps are created with upper capacity limits. Insertion beyond the
+limit would fail or constrain the scalability of the datapath. Cilium is
+using auto-derived defaults based on the given ratio of the total system
+memory.
+
+However, the upper capacity limits used by the Cilium agent can be overridden
+for advanced users. Please refer to our `map sizing guide <https://docs.cilium.io/en/v1.9/concepts/ebpf/maps/>`_.
+
+Linux Kernel
+============
+
+In general we highly recommend using a most recent LTS stable kernel such as
+>= 5.10 either provided by the `kernel community <https://www.kernel.org/category/releases.html>`_
+or from a downstream distribution of choice. The newer the kernel, the more
+likely it is that various datapath optimisations can be used.
+
+In our Cilium release blogs we also regularly highlight some of the eBPF based
+kernel work we conduct which implicitly helps Cilium's datapath performance
+such as `replacing retpolines with direct jumps in the eBPF JIT <https://cilium.io/blog/2020/02/18/cilium-17#linux-kernel-changes>`_.
+
+Moreover, the kernel allows to configure several options which will help maximize
+network performance.
 
 CONFIG_PREEMPT_NONE
 -------------------
 
 Run a kernel version with ``CONFIG_PREEMPT_NONE=y`` set. Some Linux
 distributions offer kernel images with this option set or you can re-compile
-the Linux kernel.
+the Linux kernel. ``CONFIG_PREEMPT_NONE=y`` is the recommended setting for
+server workloads.
 
-tuned network-latency profile
------------------------------
+Further Considerations
+======================
 
-Use `tuned <https://tuned-project.org/>`_ with a ``network-latency`` profile:
+Various additional settings that we recommend help to tune the system for
+specific workloads and to reduce jitter:
+
+tuned network-* profiles
+------------------------
+
+The `tuned <https://tuned-project.org/>`_ project offers various profiles to
+optimize for deterministic performance at the cost of increased power consumption,
+that is, ``network-latency`` and ``network-throughput``, for example:
 
 .. code-block:: shell-session
 
@@ -128,8 +225,8 @@ Set CPU governor to performance
 -------------------------------
 
 The CPU scaling up and down can impact latency tests and lead to sub-optimal
-performance. To achieve maximum consistent performance. Set the CPU governor to
-``performance``:
+performance. To achieve maximum consistent performance. Set the CPU governor
+to ``performance``:
 
 .. code-block:: bash
 
@@ -137,18 +234,17 @@ performance. To achieve maximum consistent performance. Set the CPU governor to
          echo performance > $CPU
    done
 
-Stop ``irqbalance``
--------------------
+Stop ``irqbalance`` and pin the NIC interrupts to specific CPUs
+---------------------------------------------------------------
 
-In case you are running ``irqbalance``, consider disabling it:
+In case you are running ``irqbalance``, consider disabling it as it might
+migrate the NIC's IRQ handling among CPUs and can therefore cause non-deterministic
+performance:
 
 .. code-block:: shell-session
 
    killall irqbalance
 
-Pin the NIC interrupts
-----------------------
-
-See `this script
+We highly recommend to pin the NIC interrupts to specific CPUs. See `this script
 <https://github.com/borkmann/netperf_scripts/blob/master/set_irq_affinity>`_
-for details on how to achieve this.
+for details and pointers on how to achieve this.
