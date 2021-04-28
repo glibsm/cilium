@@ -15,7 +15,7 @@ Introduction
 
 This chapter contains performance benchmark numbers for various scenarios. All
 tests are performed between containers running on two different bare metal
-nodes connected by a 100Gbit/s network interface.
+nodes connected back-to-back by a 100Gbit/s network interface.
 
 .. tip::
 
@@ -34,24 +34,30 @@ Throughput
   Maximum transfer rate via a single TCP connection and the total transfer rate
   of 32 accumulated connections.
 
-Request/Reply Rate
-  The number of request/reply messages per second that can be transmitted over
+Request/Response Rate
+  The number of request/response messages per second that can be transmitted over
   a single TCP connection and over 32 parallel TCP connections.
 
 Connections Rate
   The number of connections per second that can be established in sequence with
-  a single request/reply payload message transmitted for each new connection. A
+  a single request/response payload message transmitted for each new connection. A
   single process and 32 parallel processes are tested.
+
+For the various benchmarks `netperf <https://github.com/HewlettPackard/netperf>`_
+has been used to generate the workloads and to collect the metrics. For spawning
+parallel netperf sessions, `super_netperf <https://raw.githubusercontent.com/borkmann/netperf_scripts/master/super_netperf>`_
+has been used. Both netperf and super_netperf are also frequently used and well
+established tools for benchmarking by the Linux kernel networking community.
 
 .. _benchmark_throughput:
 
 Throughput
 ==========
 
-Throughput testing is useful to understand the maximum throughput that can be
-achieved with a particular configuration. All or most configuration will be
-able to achieve line-rate or close to line-rate if enough CPU resources are
-thrown at the load. It is therefore important to understand the amount of CPU
+Throughput testing (TCP_STREAM) is useful to understand the maximum throughput
+that can be achieved with a particular configuration. All or most configurations
+will be able to achieve line-rate or close to line-rate if enough CPU resources
+are thrown at the load. It is therefore important to understand the amount of CPU
 resources required to achieve a certain throughput as these CPU resources will
 no longer be available to workloads running on the machine.
 
@@ -68,9 +74,9 @@ throughput is achieved:
 
 When running in the fastest datapath option, Cilium can outperform even the
 node-to-node baseline despite performing additional work (forwarding into the
-network namespace of the container, policy enforcement, ...). This is
-because Cilium is capable of bypassing the iptables layer of the node which is
-still traversed for the node to node baseline.
+network namespace of the container, policy enforcement, ...). This is because
+Cilium is capable of bypassing the iptables layer of the node which is still
+traversed for the node to node baseline.
 
 The following graph shows the total CPU consumption across the entire system
 while running the benchmark:
@@ -92,26 +98,26 @@ is attempting to reach maximum throughput and the total is reported:
 .. image:: images/bench_tcp_stream_32_streams.png
 
 Given multiple processes are being used, all test configurations can achieve
-close to the line-rate of the network interface. The main difference is the CPU
-resources required to achieve it:
+close to line-rate transfer rates of the network interface. The main difference
+is the CPU resources required to achieve it:
 
 .. image:: images/bench_tcp_stream_32_streams_cpu.png
 
-Request/Reply Rate
-==================
+Request/Response Rate
+=====================
 
-The request/reply rate primarily measures the latency and efficiency to handle
+The request/response rate (TCP_RR) primarily measures the latency and efficiency to handle
 round-trip forwarding of an individual network packet. This benchmark will lead
-to the most packets per second possible on the wire and stresses the cost
-performed by network packet. This is the opposite of the throughput test which
-maximizes the size of each network packet.
+to the most packets per second possible on the wire and stresses the cost performed
+by a network packet. This is the opposite of the throughput test which maximizes
+the size of each network packet.
 
 A configuration that is doing well in this test (delivering high requests per
 second rates) will also deliver better (lower) network latencies.
 
-This test represents services which maintain persistent connections and
-exchange request/response type interactions with other services. This is common
-for services using REST or gRPC APIs.
+This test represents services which maintain persistent connections and exchange
+request/response type interactions with other services. This is common for services
+using REST or gRPC APIs.
 
 1 Process
 ---------
@@ -122,7 +128,7 @@ one request is counted:
 
 .. image:: images/bench_tcp_rr_1_process.png
 
-Cilium achieves almost the same request/reply rate as the baseline while only
+Cilium achieves almost the same request/response rate as the baseline while only
 consuming marginally more CPU resources:
 
 .. image:: images/bench_tcp_rr_1_process_cpu.png
@@ -136,17 +142,16 @@ is reported:
 
 .. image:: images/bench_tcp_rr_32_processes.png
 
-Cilium can achieve close to 1M requests/s while consuming about 30% of the system
-resources on both the sender and receiver:
+Cilium can achieve close to 1M requests/s in this test while consuming about 30%
+of the system resources on both the sender and receiver:
 
 .. image:: images/bench_tcp_rr_32_processes_cpu.png
-
 
 Connection Rate
 ===============
 
 The connection rate (TCP_CRR) test measures the efficiency in handling new
-connections. It is similar to the request/reply rate test but will create a new
+connections. It is similar to the request/response rate test but will create a new
 TCP connection for each round-trip. This measures the cost of establishing a
 connection, transmitting a byte in both directions, and closing the connection.
 This is more expensive than the TCP_RR test and puts stress on the cost related
@@ -217,15 +222,17 @@ Test Environment
 Test Hardware
 -------------
 
+All tests are performed using regular off-the-shelf hardware.
+
 ============  ======================================================================================================================================================
 Item          Description
 ============  ======================================================================================================================================================
-CPU           `AMD Ryzen 9 3950x, AM4 3.5GHz, 16-Core <https://www.amd.com/en/products/cpu/amd-ryzen-9-3950x>`_
-Memory        `HyperX Fury DDR4-3200 <https://www.hyperxgaming.com/us/memory/fury-ddr4>`_ 128GB
-Network Card  `Intel E810-CQDA2 <https://ark.intel.com/content/www/us/en/ark/products/192558/intel-ethernet-network-adapter-e810-cqda2.html>`_ Dual Port, 100Gbit
-Kernel        Linux 5.10
+CPU           `AMD Ryzen 9 3950x <https://www.amd.com/en/products/cpu/amd-ryzen-9-3950x>`_, AM4 platform, 3.5GHz, 16 cores / 32 threads
+Mainboard     `x570 Aorus Master <https://www.gigabyte.com/us/Motherboard/X570-AORUS-MASTER-rev-11-12/sp#sp>`_, PCIe 4.0 x16 support
+Memory        `HyperX Fury DDR4-3200 <https://www.hyperxgaming.com/us/memory/fury-ddr4>`_ 128GB, XMP clocked to 3.2GHz
+Network Card  `Intel E810-CQDA2 <https://ark.intel.com/content/www/us/en/ark/products/192558/intel-ethernet-network-adapter-e810-cqda2.html>`_, dual port, 100Gbit/s per port, PCIe 4.0 x16
+Kernel        Linux 5.10 LTS, see also :ref:`performance_tuning`
 ============  ======================================================================================================================================================
-
 
 .. _test_configurations:
 
