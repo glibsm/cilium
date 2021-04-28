@@ -97,7 +97,7 @@ MTU
 The maximum transfer unit (MTU) can have a significant impact on the network
 throughput of a configuration. Cilium will automatically detect the MTU of the
 underlying network devices. Therefore, if your system is configured to use
-jumbo frames then Cilium will automatically make us of it. 
+jumbo frames then Cilium will automatically make use of it. 
 
 To benefit from this, make sure that your system is configured to use jumbo
 frames if your network allows for it.
@@ -106,7 +106,7 @@ Kernel Optimizations
 ====================
 
 The kernel allows to configure several options which will help maximize network
-performance:
+performance.
 
 CONFIG_PREEMPT_NONE
 -------------------

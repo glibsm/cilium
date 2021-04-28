@@ -15,7 +15,7 @@ Introduction
 
 This chapter contains performance benchmark numbers for various scenarios. All
 tests are performed between containers running on two different bare metal
-nodes connected by a 100Gbit network interface.
+nodes connected by a 100Gbit/s network interface.
 
 .. tip::
 
@@ -67,7 +67,7 @@ throughput is achieved:
 .. image:: images/bench_tcp_stream_1_stream.png
 
 When running in the fastest datapath option, Cilium can outperform even the
-node to node baseline despite performing additional work (forwarding into the
+node-to-node baseline despite performing additional work (forwarding into the
 network namespace of the container, policy enforcement, ...). This is
 because Cilium is capable of bypassing the iptables layer of the node which is
 still traversed for the node to node baseline.
@@ -161,7 +161,7 @@ hardware so we can expect to see the biggest difference between tested
 configurations.
 
 A configuration that does well in this test (delivering high connection rates)
-will handling situation with overwhelming connection rates much better, leaving
+will handle situation with overwhelming connection rates much better, leaving
 more CPU resources available to workloads on the system.
 
 1 Process
@@ -192,8 +192,8 @@ sequence as possible. This is by far the most stressful test for the system.
 
 .. image:: images/bench_tcp_crr_32_processes.png
 
-This benchmark outlines major differences between the tested configurations. It
-in particular illustrates the overall cost of iptables which is optimized to
+This benchmark outlines major differences between the tested configurations. In
+particular, it illustrates the overall cost of iptables which is optimized to
 perform most of the required work per connection and then caches the result.
 This leads to a worst-case performance scenario when a lot of new connections
 are expected.
